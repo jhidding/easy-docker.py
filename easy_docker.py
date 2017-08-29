@@ -17,16 +17,16 @@ class DockerContainer(object):
     same container upon exit.
     """
 
-    client = docker.Client()
+    client = docker.from_env()
+    containers = client.containers
 
     def __init__(self, image, working_dir=None):
         self.image = image
         self.working_dir = working_dir
 
-        container = self.client.create_container(
+        self.container = self.client.containers.create(
             image=image, detach=True, stdin_open=True,
             working_dir=working_dir)
-        self.container_id = container['Id']
 
     def put_archive(self, archive, path="."):
         """Put the contents of an archive into the Docker container.
@@ -43,8 +43,8 @@ class DockerContainer(object):
         if self.working_dir is not None:
             path = os.path.join(self.working_dir, path)
 
-        self.client.put_archive(
-            self.container_id, path, archive.buffer)
+        self.container.put_archive(
+            path, archive.buffer)
 
     def get_archive(self, path):
         """Get a file or directory from the container and make it into
@@ -52,8 +52,7 @@ class DockerContainer(object):
         if self.working_dir is not None and not os.path.isabs(path):
             path = os.path.join(self.working_dir, path)
 
-        strm, stat = self.client.get_archive(
-            self.container_id, path)
+        strm, stat = self.container.get_archive(path)
 
         return Archive('r', strm.read())
 
@@ -71,20 +70,17 @@ class DockerContainer(object):
             Output of command.
         :rtype: bytes
         """
-        exe = self.client.exec_create(
-            container=self.container_id,
+        return self.container.exec_run(
             cmd=cmd, **kwargs)
 
-        return self.client.exec_start(exec_id=exe['Id'])
-
     def start(self):
-        self.client.start(container=self.container_id)
+        self.container.start()
 
     def kill(self):
-        self.client.kill(self.container_id)
+        self.container.kill()
 
     def remove(self, force=False):
-        self.client.remove_container(self.container_id, force=force)
+        self.container.remove(force=force)
 
     def __enter__(self):
         self.start()
